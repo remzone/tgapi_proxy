@@ -103,12 +103,12 @@ curl -H "X-TGProxy-Key: <TGPROXY_API_KEY>" \
 ```bash
 go run ./cmd/tgproxy menu       # интерактивное управление
 docker compose logs -f          # поток stdout/stderr
-ls -lh logs/                    # файловые логи
+docker compose exec tgproxy ls -lh /var/log/tgproxy  # файловые логи
 docker compose pull --ignore-buildable
 docker compose up -d --build    # пересборка/обновление
 ```
 
-Приложение создает `logs/tgproxy-YYYY-MM-DD.log`. При смене даты оно открывает новый файл и удаляет файлы старше 7 суток. Для Docker stdout в Compose также задан предел: не более 7 файлов по 10 MB.
+Приложение создает `tgproxy-YYYY-MM-DD.log` в Docker volume `tgproxy_logs`. При смене даты оно открывает новый файл и удаляет файлы старше 7 суток. Просмотреть файлы можно командой `docker compose exec tgproxy ls -lh /var/log/tgproxy`, а поток записей — через `docker compose logs -f`. Для Docker stdout в Compose также задан предел: не более 7 файлов по 10 MB.
 
 ## Безопасность и диагностика
 

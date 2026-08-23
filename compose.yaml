@@ -17,7 +17,7 @@ services:
     expose:
       - "8080"
     volumes:
-      - ./logs:/var/log/tgproxy
+      - tgproxy_logs:/var/log/tgproxy
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -67,5 +67,6 @@ services:
       - no-new-privileges:true
 
 volumes:
+  tgproxy_logs:
   caddy_data:
   caddy_config:
