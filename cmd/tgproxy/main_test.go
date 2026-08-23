@@ -67,6 +67,11 @@ func TestAPIHandlerServesNeutralPlaceholder(t *testing.T) {
 				t.Errorf("%s: placeholder exposes %q", path, sensitive)
 			}
 		}
+		for _, expected := range []string{"Яна", "Анатолий", "18 декабря 2027", "Avemori"} {
+			if !strings.Contains(response.Body.String(), expected) {
+				t.Errorf("%s: placeholder is missing %q", path, expected)
+			}
+		}
 	}
 }
 
