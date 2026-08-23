@@ -25,7 +25,7 @@ import (
 	"tgproxy/internal/rotatelog"
 )
 
-const version = "1.1.0"
+const version = "1.1.1"
 
 const placeholderHTML = `<!doctype html>
 <html lang="ru">
@@ -300,6 +300,10 @@ func menu() error {
 				fmt.Println("Ошибка:", err)
 			}
 		case "2":
+			if _, err := os.Stat(".env"); err != nil {
+				fmt.Println("Сначала выберите пункт 1 и завершите настройку.")
+				continue
+			}
 			runCompose("up", "-d", "--build")
 		case "3":
 			runCompose("down")
@@ -334,9 +338,22 @@ func wizard(in *bufio.Reader) error {
 		}
 		return s
 	}
-	host := strings.TrimSuffix(ask("Публичный IP или домен", env("TGPROXY_PUBLIC_HOST", "example.com")), ".")
-	if net.ParseIP(host) == nil && !isDomain(host) {
-		return errors.New("укажите корректный публичный IP или домен")
+	askPort := func(label, def string) string {
+		for {
+			value := ask(label, def)
+			if validPort(value) {
+				return value
+			}
+			fmt.Println("Введите номер порта от 1 до 65535, например", def)
+		}
+	}
+	var host string
+	for {
+		host = strings.TrimSuffix(ask("Публичный IP или домен", env("TGPROXY_PUBLIC_HOST", "example.com")), ".")
+		if net.ParseIP(host) != nil || isDomain(host) {
+			break
+		}
+		fmt.Println("Введите корректный публичный IP или домен, например tg.example.com")
 	}
 	https := false
 	if isDomain(host) {
@@ -348,16 +365,16 @@ func wizard(in *bufio.Reader) error {
 	if https {
 		mtDefault, apiDefault, profile = "8443", "443", "https"
 	}
-	mtPort := ask("Порт MTProto", mtDefault)
-	apiPort := ask("Порт Bot API", apiDefault)
-	if !validPort(mtPort) || !validPort(apiPort) {
-		return errors.New("порт должен быть числом от 1 до 65535")
+	mtPort := askPort("Порт MTProto", mtDefault)
+	apiPort := apiDefault
+	if https {
+		fmt.Println("Порт Bot API: 443 (автоматически для HTTPS)")
+	} else {
+		apiPort = askPort("Порт Bot API", apiDefault)
 	}
-	if https && apiPort != "443" {
-		return errors.New("для автоматического HTTPS порт Bot API должен быть 443")
-	}
-	if mtPort == apiPort {
-		return errors.New("порты MTProto и Bot API должны отличаться")
+	for mtPort == apiPort {
+		fmt.Println("Порты MTProto и Bot API должны отличаться.")
+		mtPort = askPort("Другой порт MTProto", "8443")
 	}
 	apiKey := randomHex(32)
 	secret := generateSecret()

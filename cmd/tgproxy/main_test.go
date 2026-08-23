@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -114,6 +116,39 @@ func TestValidPort(t *testing.T) {
 	for _, port := range []string{"", "0", "65536", "https", "443\nBAD=value"} {
 		if validPort(port) {
 			t.Errorf("expected invalid port: %q", port)
+		}
+	}
+}
+
+func TestWizardRetriesInvalidPortAndWritesHTTPSConfig(t *testing.T) {
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(originalDir) })
+
+	// Empty HTTPS answer selects the default "yes"; the accidental word
+	// entered as a port must be rejected and requested again.
+	input := bufio.NewReader(strings.NewReader("u-nas-budet-svadba.ru\n\nда\n8443\n"))
+	if err := wizard(input); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(".env")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := string(content)
+	for _, expected := range []string{
+		"TGPROXY_PUBLIC_HOST=u-nas-budet-svadba.ru",
+		"TGPROXY_MTG_PORT=8443",
+		"TGPROXY_API_PORT=443",
+		"COMPOSE_PROFILES=https",
+	} {
+		if !strings.Contains(config, expected) {
+			t.Errorf("missing %q in generated config", expected)
 		}
 	}
 }
