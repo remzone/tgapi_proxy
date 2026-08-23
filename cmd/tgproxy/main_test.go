@@ -21,6 +21,12 @@ func TestAPIHandlerAuthorizationAndRedaction(t *testing.T) {
 		if strings.Contains(r.URL.RawQuery, "proxy_key") {
 			t.Error("proxy key leaked upstream")
 		}
+		if r.Header.Get("X-TGProxy-Key") != "" {
+			t.Error("proxy key header leaked upstream")
+		}
+		if r.Host != "api.telegram.org" {
+			t.Errorf("unexpected upstream Host: %q", r.Host)
+		}
 		return &http.Response{StatusCode: http.StatusNoContent, Header: make(http.Header), Body: http.NoBody, Request: r}, nil
 	})
 	h, err := apiHandler(c, slog.New(slog.NewTextHandler(io.Discard, nil)), transport)
@@ -36,12 +42,22 @@ func TestAPIHandlerAuthorizationAndRedaction(t *testing.T) {
 
 	authorized := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/bot123:secret/getMe?proxy_key="+c.APIKey, nil)
+	req.Host = "u-nas-budet-svadba.ru"
 	h.ServeHTTP(authorized, req)
 	if authorized.Code != http.StatusNoContent {
 		t.Fatalf("got %d", authorized.Code)
 	}
 	if got := redactedPath(req.URL.Path); strings.Contains(got, "secret") {
 		t.Fatalf("token was not redacted: %s", got)
+	}
+
+	authorizedByHeader := httptest.NewRecorder()
+	headerReq := httptest.NewRequest(http.MethodGet, "/bot123:secret/getMe", nil)
+	headerReq.Host = "u-nas-budet-svadba.ru"
+	headerReq.Header.Set("X-TGProxy-Key", c.APIKey)
+	h.ServeHTTP(authorizedByHeader, headerReq)
+	if authorizedByHeader.Code != http.StatusNoContent {
+		t.Fatalf("header authorization got %d", authorizedByHeader.Code)
 	}
 }
 

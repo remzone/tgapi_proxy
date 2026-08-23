@@ -165,6 +165,14 @@ func apiHandler(c config, logger *slog.Logger, transport http.RoundTripper) (htt
 		return nil, err
 	}
 	proxy := httputil.NewSingleHostReverseProxy(target)
+	originalDirector := proxy.Director
+	proxy.Director = func(r *http.Request) {
+		originalDirector(r)
+		// NewSingleHostReverseProxy preserves the incoming Host header. Telegram
+		// routes that host to its public website and responds with a redirect to
+		// core.telegram.org instead of handling the Bot API request.
+		r.Host = target.Host
+	}
 	if transport == nil {
 		transport = &http.Transport{Proxy: http.ProxyFromEnvironment, DialContext: (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext, ForceAttemptHTTP2: true, MaxIdleConns: 200, IdleConnTimeout: 90 * time.Second, TLSHandshakeTimeout: 10 * time.Second, ExpectContinueTimeout: time.Second}
 	}
@@ -195,6 +203,9 @@ func apiHandler(c config, logger *slog.Logger, transport http.RoundTripper) (htt
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		// The key authenticates the caller to this proxy only and must never be
+		// forwarded to Telegram.
+		r.Header.Del("X-TGProxy-Key")
 		logger.Info("api request", "method", r.Method, "path", redactedPath(r.URL.Path), "remote", remoteIP(r.RemoteAddr), "duration_ms", time.Since(start).Milliseconds())
 		proxy.ServeHTTP(w, r)
 	}), nil
