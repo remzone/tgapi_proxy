@@ -55,3 +55,40 @@ func TestValidTelegramPath(t *testing.T) {
 		}
 	}
 }
+
+func TestIsDomain(t *testing.T) {
+	for _, host := range []string{"proxy.example.com", "tg-api.example.ru", "example.com."} {
+		if !isDomain(host) {
+			t.Errorf("expected domain: %s", host)
+		}
+	}
+	for _, host := range []string{"", "127.0.0.1", "2001:db8::1", "localhost", "-bad.example.com", "bad_.example.com"} {
+		if isDomain(host) {
+			t.Errorf("expected invalid domain: %s", host)
+		}
+	}
+}
+
+func TestAnswerYes(t *testing.T) {
+	for _, answer := range []string{"да", "Д", "yes", "Y", "1"} {
+		if !answerYes(answer) {
+			t.Errorf("expected yes: %s", answer)
+		}
+	}
+	if answerYes("нет") {
+		t.Error("expected no")
+	}
+}
+
+func TestValidPort(t *testing.T) {
+	for _, port := range []string{"1", "443", "65535"} {
+		if !validPort(port) {
+			t.Errorf("expected valid port: %s", port)
+		}
+	}
+	for _, port := range []string{"", "0", "65536", "https", "443\nBAD=value"} {
+		if validPort(port) {
+			t.Errorf("expected invalid port: %q", port)
+		}
+	}
+}

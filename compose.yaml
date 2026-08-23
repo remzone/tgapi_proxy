@@ -14,7 +14,8 @@ services:
       TGPROXY_LOG_DIR: /var/log/tgproxy
     ports:
       - "${TGPROXY_MTG_PORT:-443}:443/tcp"
-      - "${TGPROXY_API_PORT:-8443}:8080/tcp"
+    expose:
+      - "8080"
     volumes:
       - ./logs:/var/log/tgproxy
     security_opt:
@@ -34,3 +35,37 @@ services:
       options:
         max-size: "10m"
         max-file: "7"
+
+  api-http:
+    image: caddy:2.10-alpine
+    profiles: ["http"]
+    restart: unless-stopped
+    command: ["caddy", "reverse-proxy", "--from", ":8080", "--to", "tgproxy:8080"]
+    depends_on:
+      tgproxy:
+        condition: service_healthy
+    ports:
+      - "${TGPROXY_API_PORT:-8443}:8080/tcp"
+    security_opt:
+      - no-new-privileges:true
+
+  api-https:
+    image: caddy:2.10-alpine
+    profiles: ["https"]
+    restart: unless-stopped
+    command: ["caddy", "reverse-proxy", "--from", "${TGPROXY_PUBLIC_HOST:?set TGPROXY_PUBLIC_HOST}", "--to", "tgproxy:8080"]
+    depends_on:
+      tgproxy:
+        condition: service_healthy
+    ports:
+      - "80:80/tcp"
+      - "${TGPROXY_API_PORT:-443}:443/tcp"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  caddy_data:
+  caddy_config:

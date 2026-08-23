@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -24,7 +25,7 @@ import (
 	"tgproxy/internal/rotatelog"
 )
 
-const version = "1.0.0"
+const version = "1.1.0"
 
 type config struct {
 	APIListen, APIKey, Upstream, MTGPath, MTGListen, MTGSecret, PublicHost, LogDir string
@@ -269,17 +270,75 @@ func wizard(in *bufio.Reader) error {
 		}
 		return s
 	}
-	host := ask("Публичный IP или домен", env("TGPROXY_PUBLIC_HOST", "example.com"))
-	mtPort := ask("Порт MTProto", "443")
-	apiPort := ask("Порт Bot API", "8443")
+	host := strings.TrimSuffix(ask("Публичный IP или домен", env("TGPROXY_PUBLIC_HOST", "example.com")), ".")
+	if net.ParseIP(host) == nil && !isDomain(host) {
+		return errors.New("укажите корректный публичный IP или домен")
+	}
+	https := false
+	if isDomain(host) {
+		https = answerYes(ask("Включить HTTPS с автоматическим сертификатом? (да/нет)", "да"))
+	} else {
+		fmt.Println("Для IP HTTPS не включён: укажите домен с DNS-записью на этот сервер.")
+	}
+	mtDefault, apiDefault, profile := "443", "8443", "http"
+	if https {
+		mtDefault, apiDefault, profile = "8443", "443", "https"
+	}
+	mtPort := ask("Порт MTProto", mtDefault)
+	apiPort := ask("Порт Bot API", apiDefault)
+	if !validPort(mtPort) || !validPort(apiPort) {
+		return errors.New("порт должен быть числом от 1 до 65535")
+	}
+	if https && apiPort != "443" {
+		return errors.New("для автоматического HTTPS порт Bot API должен быть 443")
+	}
+	if mtPort == apiPort {
+		return errors.New("порты MTProto и Bot API должны отличаться")
+	}
 	apiKey := randomHex(32)
 	secret := generateSecret()
-	content := fmt.Sprintf("TGPROXY_PUBLIC_HOST=%s\nTGPROXY_MTG_PORT=%s\nTGPROXY_API_PORT=%s\nTGPROXY_API_KEY=%s\nTGPROXY_MTG_SECRET=%s\n", host, mtPort, apiPort, apiKey, secret)
+	content := fmt.Sprintf("TGPROXY_PUBLIC_HOST=%s\nTGPROXY_MTG_PORT=%s\nTGPROXY_API_PORT=%s\nTGPROXY_API_KEY=%s\nTGPROXY_MTG_SECRET=%s\nCOMPOSE_PROFILES=%s\n", host, mtPort, apiPort, apiKey, secret, profile)
 	if err := os.WriteFile(".env", []byte(content), 0600); err != nil {
 		return err
 	}
 	fmt.Println("Создан .env. Ключ Bot API:", apiKey)
+	if https {
+		fmt.Printf("HTTPS будет доступен по адресу https://%s/ после запуска.\n", host)
+		fmt.Println("Убедитесь, что DNS уже указывает на сервер, а TCP-порты 80 и 443 открыты.")
+	}
 	return nil
+}
+
+func isDomain(host string) bool {
+	host = strings.TrimSuffix(strings.TrimSpace(host), ".")
+	if host == "" || net.ParseIP(host) != nil || !strings.Contains(host, ".") {
+		return false
+	}
+	for _, label := range strings.Split(host, ".") {
+		if label == "" || len(label) > 63 || strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
+			return false
+		}
+		for _, r := range label {
+			if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func answerYes(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "да", "д", "yes", "y", "1", "true":
+		return true
+	default:
+		return false
+	}
+}
+
+func validPort(value string) bool {
+	port, err := strconv.Atoi(value)
+	return err == nil && port >= 1 && port <= 65535
 }
 
 func randomHex(n int) string { b := make([]byte, n); _, _ = rand.Read(b); return hex.EncodeToString(b) }
