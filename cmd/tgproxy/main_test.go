@@ -43,6 +43,31 @@ func TestAPIHandlerAuthorizationAndRedaction(t *testing.T) {
 	}
 }
 
+func TestAPIHandlerServesNeutralPlaceholder(t *testing.T) {
+	c := config{APIKey: strings.Repeat("k", 32), Upstream: "https://api.telegram.org"}
+	h, err := apiHandler(c, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range []string{"/", "/favicon.ico", "/admin", "/anything"} {
+		response := httptest.NewRecorder()
+		h.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusOK {
+			t.Errorf("%s: got status %d", path, response.Code)
+		}
+		if contentType := response.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "text/html") {
+			t.Errorf("%s: unexpected content type %q", path, contentType)
+		}
+		body := strings.ToLower(response.Body.String())
+		for _, sensitive := range []string{"telegram", "proxy", "tgproxy"} {
+			if strings.Contains(body, sensitive) {
+				t.Errorf("%s: placeholder exposes %q", path, sensitive)
+			}
+		}
+	}
+}
+
 func TestValidTelegramPath(t *testing.T) {
 	for _, path := range []string{"/bot123:getMe/getMe", "/file/bot123:file/documents/a"} {
 		if !validTelegramPath(path) {

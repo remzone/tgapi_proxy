@@ -27,6 +27,20 @@ import (
 
 const version = "1.1.0"
 
+const placeholderHTML = `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Сайт работает</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f4f6f8;color:#25313c;font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}.card{width:min(90%,480px);padding:42px;border-radius:18px;background:#fff;box-shadow:0 12px 40px rgba(25,40,55,.1);text-align:center}h1{margin:0 0 12px;font-size:28px}p{margin:0;color:#66727d}
+  </style>
+</head>
+<body><main class="card"><h1>Сайт работает</h1><p>Сервис доступен и принимает запросы.</p></main></body>
+</html>`
+
 type config struct {
 	APIListen, APIKey, Upstream, MTGPath, MTGListen, MTGSecret, PublicHost, LogDir string
 	TLSCert, TLSKey                                                                string
@@ -176,6 +190,10 @@ func apiHandler(c config, logger *slog.Logger, transport http.RoundTripper) (htt
 			io.WriteString(w, `{"status":"ok"}`)
 			return
 		}
+		if !validTelegramPath(r.URL.Path) {
+			servePlaceholder(w)
+			return
+		}
 		provided := r.Header.Get("X-TGProxy-Key")
 		if provided == "" {
 			provided = r.URL.Query().Get("proxy_key")
@@ -187,13 +205,19 @@ func apiHandler(c config, logger *slog.Logger, transport http.RoundTripper) (htt
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		if !validTelegramPath(r.URL.Path) {
-			http.Error(w, "invalid Telegram Bot API path", http.StatusBadRequest)
-			return
-		}
 		logger.Info("api request", "method", r.Method, "path", redactedPath(r.URL.Path), "remote", remoteIP(r.RemoteAddr), "duration_ms", time.Since(start).Milliseconds())
 		proxy.ServeHTTP(w, r)
 	}), nil
+}
+
+func servePlaceholder(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, placeholderHTML)
 }
 
 func validTelegramPath(path string) bool {
