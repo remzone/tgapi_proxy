@@ -17,6 +17,25 @@
 
 Docker-сборка использует Go 1.26, необходимый для `mtg` v2.2.8; устанавливать Go на сервер отдельно не требуется.
 
+### Слабая ВМ
+
+Dockerfile специально собирает TGProxy и MTG последовательно, с одним процессом компиляции (`GOMAXPROCS=1`, `-p=1`). Это уменьшает пиковое потребление памяти ценой более долгой первой сборки. Готовые контейнеры потребляют значительно меньше ресурсов, чем компиляция.
+
+Для ВМ с 512 MB–1 GB RAM перед первой сборкой рекомендуется добавить 1 GB swap:
+
+```bash
+free -h
+swapon --show
+fallocate -l 1G /swapfile
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+free -h
+```
+
+После успешной сборки swap можно оставить: он помогает переживать кратковременные пики памяти. Если `fallocate` недоступен, используйте `dd if=/dev/zero of=/swapfile bs=1M count=1024 status=progress`.
+
 ## Быстрый запуск
 
 ```bash
