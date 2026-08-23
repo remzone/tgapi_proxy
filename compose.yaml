@@ -1,0 +1,36 @@
+services:
+  tgproxy:
+    build:
+      context: .
+      args:
+        MTG_VERSION: v2.2.8
+    image: tgproxy:local
+    container_name: tgproxy
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TGPROXY_API_LISTEN: ":8080"
+      TGPROXY_MTG_LISTEN: "0.0.0.0:443"
+      TGPROXY_LOG_DIR: /var/log/tgproxy
+    ports:
+      - "${TGPROXY_MTG_PORT:-443}:443/tcp"
+      - "${TGPROXY_API_PORT:-8443}:8080/tcp"
+    volumes:
+      - ./logs:/var/log/tgproxy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "7"
